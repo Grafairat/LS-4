@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>figma.fun — Shorten any link</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<script>
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  ШАГ 1: ВСТАВЬ СВОИ КЛЮЧИ СЮДА (один раз)              ║
+  // ║                                                          ║
+  // ║  Как получить: зайди на jsonbin.io → Sign Up            ║
+  // ║  → Profile → API Keys → скопируй Master Key             ║
+  // ║  → New Bin → введи {"links":[]} → Create                ║
+  // ║  → скопируй Bin ID из адресной строки                   ║
+  // ╚══════════════════════════════════════════════════════════╝
+
+  const JSONBIN_API_KEY = "$2a$10$gXwzHkBNw/uEHq8HQbBy4uNBsIDNxcayQXm3wBSgpe70HQkXxiCyy";   // example: $2b$10$abc...
+  const JSONBIN_BIN_ID  = "69bd78e5c3097a1dd54320a4";       // example: 64f3a1b2e3c4d5...
+
+  // ╔══════════════════════════════════════════════════════════╗
+  // ║  ЛИЦЕНЗИОННЫЕ КЛЮЧИ — добавляй по одному на клиента     ║
+  // ║  Формат: { key: 'КЛЮЧ', limit: N }                      ║
+  // ║  limit: 3 / 10 / 30 / 100 или Infinity для безлимита    ║
+  // ╚══════════════════════════════════════════════════════════╝
+  // Accounts for login { email, key, type: 'admin'|'paid', limit }
+  const ACCOUNTS = [
+    { email: 'grafairat@gmail.com', key: 'godmode', type: 'admin', limit: Infinity },
+    // { email: 'client@example.com', key: 'CLIENT-KEY-001', type: 'paid', limit: 10 },
+  ];
+  const FREE_LIMIT = 1; // links without login
+  // ─── больше ничего менять не нужно ───────────────────────
+</script>
+
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #7c6aff;
+    --accent2: #ff6ab0;
+    --accent3: #6affcc;
+    --text: #f0eeff;
+    --muted: #7070a0;
+    --success: #4ade80;
+    --danger: #f87171;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(124,106,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(124,106,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none; z-index: 0;
+  }
+  .orb { position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0; }
+  .orb1 { width: 400px; height: 400px; background: rgba(124,106,255,0.12); top: -100px; left: -100px; }
+  .orb2 { width: 300px; height: 300px; background: rgba(255,106,176,0.08); bottom: 20%; right: -80px; }
+  .wrapper { position: relative; z-index: 1; }
+
+  /* NOT CONFIGURED SCREEN */
+  .not-configured {
+    max-width: 600px; margin: 80px auto; padding: 0 24px; text-align: center;
+  }
+  .not-configured .icon { font-size: 48px; margin-bottom: 20px; }
+  .not-configured h2 { font-size: 26px; font-weight: 700; margin-bottom: 12px; }
+  .not-configured p { color: var(--muted); font-size: 15px; line-height: 1.7; margin-bottom: 32px; }
+  .steps-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 28px 32px; text-align: left;
+  }
+  .steps-box h3 { font-size: 14px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; }
+  .step-item { display: flex; gap: 14px; margin-bottom: 18px; align-items: flex-start; }
+  .step-item:last-child { margin-bottom: 0; }
+  .sn { width: 28px; height: 28px; border-radius: 8px; background: rgba(124,106,255,0.15); border: 1px solid rgba(124,106,255,0.3); color: var(--accent); font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .st { font-size: 14px; line-height: 1.6; color: var(--text); font-family: 'DM Mono', monospace; }
+  .st code { background: var(--surface2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; font-size: 12px; color: var(--accent3); }
+  .st a { color: var(--accent); text-decoration: none; }
+  .st a:hover { text-decoration: underline; }
+
+  /* NAV */
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 40px; border-bottom: 1px solid var(--border); }
+  .logo { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; }
+  .logo span { color: var(--accent); }
+  .nav-links { display: flex; gap: 8px; }
+  nav button { background: none; border: 1px solid var(--border); color: var(--muted); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 13px; transition: all 0.2s; }
+  nav button:hover, nav button.active { border-color: var(--accent); color: var(--text); background: rgba(124,106,255,0.08); }
+  nav button.active { color: var(--accent); }
+
+  /* PAGES */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* HERO */
+  .hero { max-width: 720px; margin: 0 auto; padding: 72px 24px 40px; text-align: center; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(124,106,255,0.1); border: 1px solid rgba(124,106,255,0.3); border-radius: 100px; padding: 5px 14px; font-size: 12px; color: var(--accent); margin-bottom: 28px; font-family: 'DM Mono', monospace; }
+  .hero-badge::before { content: '◆'; font-size: 8px; }
+  .hero h1 { font-size: clamp(36px, 6vw, 60px); font-weight: 800; line-height: 1.05; letter-spacing: -2px; margin-bottom: 16px; }
+  .hero h1 .grad { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .hero p { color: var(--muted); font-size: 17px; line-height: 1.6; margin-bottom: 40px; }
+
+  /* FORM */
+  .shorten-form { display: flex; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 8px 8px 8px 20px; transition: border-color 0.2s; align-items: center; }
+  .shorten-form:focus-within { border-color: var(--accent); }
+  .shorten-form input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-size: 15px; font-family: 'DM Mono', monospace; min-width: 0; }
+  .shorten-form input::placeholder { color: var(--muted); }
+  .btn-shorten { background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 10px; font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+  .btn-shorten:hover { background: #6a58f0; transform: translateY(-1px); }
+  .btn-shorten:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* RESULT */
+  .result-box { margin-top: 20px; background: var(--surface); border: 1px solid rgba(106,255,204,0.3); border-radius: 16px; padding: 20px 24px; display: none; animation: slideUp 0.3s ease; }
+  .result-box.visible { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  .result-url { flex: 1; min-width: 0; }
+  .result-url .label { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; margin-bottom: 4px; }
+  .result-url .short-link { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--accent3); text-decoration: none; word-break: break-all; }
+  .result-url .orig-link { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-family: 'DM Mono', monospace; }
+  .result-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .btn-copy, .btn-qr { padding: 10px 16px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border); }
+  .btn-copy { background: rgba(106,255,204,0.1); color: var(--accent3); border-color: rgba(106,255,204,0.3); }
+  .btn-copy:hover { background: rgba(106,255,204,0.2); }
+  .btn-copy.copied { background: rgba(74,222,128,0.15); color: var(--success); border-color: var(--success); }
+  .btn-qr { background: var(--surface2); color: var(--muted); }
+  .btn-qr:hover { color: var(--text); border-color: var(--accent); }
+
+  /* STATS */
+  .stats-strip { display: flex; justify-content: center; gap: 48px; margin: 48px 0 0; padding: 32px 0; border-top: 1px solid var(--border); }
+  .stat { text-align: center; }
+  .stat-num { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+  .stat-num span { color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
+
+  /* LINKS */
+  .recent-section { max-width: 720px; margin: 0 auto; padding: 0 24px 60px; }
+  .section-title { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  .refresh-btn { background: none; border: 1px solid var(--border); color: var(--muted); width: 26px; height: 26px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .links-list { display: flex; flex-direction: column; gap: 8px; }
+  .link-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 16px; transition: border-color 0.2s; cursor: pointer; }
+  .link-item:hover { border-color: rgba(124,106,255,0.4); }
+  .link-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(124,106,255,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px; }
+  .link-info { flex: 1; min-width: 0; }
+  .link-short { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--accent3); }
+  .link-orig { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-family: 'DM Mono', monospace; }
+  .link-meta { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .link-clicks { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 4px; }
+  .link-clicks::before { content: '↗'; color: var(--accent); font-size: 11px; }
+  .link-date { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .link-actions { display: flex; gap: 6px; }
+  .btn-sm { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-family: 'DM Mono', monospace; cursor: pointer; border: 1px solid var(--border); background: none; color: var(--muted); transition: all 0.15s; }
+  .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sm.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .empty-state { text-align: center; padding: 40px 0; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 13px; }
+  .empty-state .emoji { font-size: 32px; display: block; margin-bottom: 12px; }
+
+  /* ANALYTICS */
+  .analytics-page { max-width: 900px; margin: 0 auto; padding: 48px 24px; }
+  .page-header { margin-bottom: 32px; }
+  .page-header h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-header p { color: var(--muted); font-size: 14px; margin-top: 6px; font-family: 'DM Mono', monospace; }
+  .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px; }
+  .metric-label { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .metric-value { font-size: 36px; font-weight: 800; letter-spacing: -1px; }
+  .metric-sub { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 16px; }
+  .chart-title { font-size: 13px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+  .chart-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .bar-chart { display: flex; flex-direction: column; gap: 10px; }
+  .bar-row { display: flex; align-items: center; gap: 12px; }
+  .bar-label { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); width: 100px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; background: var(--surface2); border-radius: 4px; height: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+  .bar-count { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text); width: 36px; text-align: right; flex-shrink: 0; }
+  .donut-wrap { display: flex; align-items: center; gap: 28px; }
+  .donut-legend { display: flex; flex-direction: column; gap: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-family: 'DM Mono', monospace; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-pct { color: var(--text); font-weight: 500; margin-left: auto; padding-left: 16px; }
+  .link-selector { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .link-chip { background: var(--surface); border: 1px solid var(--border); color: var(--muted); padding: 7px 14px; border-radius: 100px; font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .link-chip:hover, .link-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(124,106,255,0.08); }
+  .no-data { text-align: center; padding: 60px 0; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 13px; }
+  .sparkline-wrap { display: flex; align-items: flex-end; gap: 4px; height: 64px; }
+  .spark-bar { flex: 1; background: rgba(124,106,255,0.3); border-radius: 3px 3px 0 0; transition: background 0.2s; }
+  .spark-bar:hover { background: var(--accent); }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px; max-width: 360px; width: 90%; text-align: center; animation: popIn 0.25s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes popIn { from { opacity:0; transform:scale(0.92); } to { opacity:1; transform:scale(1); } }
+  .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .modal p { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 12px; margin-bottom: 24px; word-break: break-all; }
+  #qr-canvas { border-radius: 12px; display: block; margin: 0 auto 24px; }
+  .modal-close { width: 100%; padding: 12px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 10px; font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .modal-close:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 12px 24px; border-radius: 100px; font-size: 13px; font-family: 'DM Mono', monospace; opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 200; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+
+
+
+
+  /* ── LOGIN MODAL ── */
+  .login-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.82); backdrop-filter:blur(10px); display:none; align-items:center; justify-content:center; z-index:500; padding:16px; }
+  .login-overlay.open { display:flex; }
+  .login-box { background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:36px 32px; max-width:380px; width:100%; position:relative; animation:popIn 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+  .login-box h2 { font-size:22px; font-weight:800; letter-spacing:-0.5px; margin-bottom:6px; }
+  .login-box .login-sub { color:var(--muted); font-size:13px; font-family:'DM Mono',monospace; margin-bottom:28px; }
+  .login-field { margin-bottom:14px; }
+  .login-field label { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; display:block; margin-bottom:6px; }
+  .login-field input { width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:13px 16px; border-radius:10px; font-family:'DM Mono',monospace; font-size:14px; outline:none; transition:border-color 0.2s; }
+  .login-field input:focus { border-color:var(--accent); }
+  .login-field input::placeholder { color:var(--muted); }
+  .login-submit { width:100%; padding:14px; background:var(--accent); color:white; border:none; border-radius:12px; font-family:'Syne',sans-serif; font-size:15px; font-weight:700; cursor:pointer; transition:all 0.2s; margin-top:8px; }
+  .login-submit:hover { background:#6a58f0; transform:translateY(-1px); }
+  .login-err { color:var(--danger); font-size:12px; font-family:'DM Mono',monospace; margin-top:12px; display:none; text-align:center; }
+  .login-err.show { display:block; }
+  .login-close { position:absolute; top:16px; right:16px; background:none; border:1px solid var(--border); color:var(--muted); width:30px; height:30px; border-radius:8px; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+  .login-close:hover { border-color:var(--danger); color:var(--danger); }
+
+  /* ── USER BADGE IN NAV ── */
+  .user-badge { display:inline-flex; align-items:center; gap:7px; background:var(--surface2); border:1px solid var(--border); border-radius:100px; padding:6px 14px; font-family:'DM Mono',monospace; font-size:12px; cursor:pointer; transition:all 0.2s; }
+  .user-badge:hover { border-color:var(--accent); }
+  .user-badge .badge-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .user-badge .badge-dot.admin { background:var(--accent3); box-shadow:0 0 6px var(--accent3); }
+  .user-badge .badge-dot.paid  { background:var(--accent); }
+  .user-badge .badge-name { color:var(--text); }
+  .user-badge .badge-type { color:var(--muted); }
+  .btn-login-nav { background:rgba(124,106,255,0.1); border:1px solid rgba(124,106,255,0.3) !important; color:var(--accent) !important; }
+  .btn-login-nav:hover { background:rgba(124,106,255,0.2) !important; }
+
+  /* ── PAYWALL ── */
+  .pw-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:300; padding:16px; }
+  .pw-overlay.open { display:flex; }
+  .pw-modal { background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:32px; max-width:440px; width:100%; max-height:90vh; overflow-y:auto; animation:popIn 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+  .pw-modal h2 { font-size:22px; font-weight:800; letter-spacing:-0.5px; margin-bottom:6px; }
+  .pw-modal .pw-sub { color:var(--muted); font-size:13px; font-family:'DM Mono',monospace; margin-bottom:24px; }
+  .pw-plans { display:flex; flex-direction:column; gap:10px; margin-bottom:24px; }
+  .pw-plan { border:1.5px solid var(--border); border-radius:14px; padding:16px 20px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:14px; }
+  .pw-plan:hover { border-color:rgba(124,106,255,0.5); background:rgba(124,106,255,0.04); }
+  .pw-plan.selected { border-color:var(--accent2); background:rgba(255,106,176,0.06); }
+  .pw-plan .radio { width:20px; height:20px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+  .pw-plan.selected .radio { border-color:var(--accent2); background:var(--accent2); }
+  .pw-plan.selected .radio::after { content:''; width:8px; height:8px; border-radius:50%; background:white; }
+  .pw-plan-info { flex:1; }
+  .pw-plan-title { font-size:15px; font-weight:700; }
+  .pw-plan-title .price { color:var(--text); }
+  .pw-plan-title .links-count { color:var(--muted); font-weight:500; }
+  .pw-plan-badge { font-size:11px; margin-top:3px; font-family:'DM Mono',monospace; }
+  .pw-plan-badge.pink { color:var(--accent2); }
+  .pw-plan-badge.green { color:var(--accent3); }
+  .pw-divider { border:none; border-top:1px solid var(--border); margin:20px 0; }
+  .pw-tab-row { display:flex; gap:8px; margin-bottom:20px; }
+  .pw-tab { flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:none; color:var(--muted); font-family:'Syne',sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s; }
+  .pw-tab.active { border-color:var(--accent); color:var(--accent); background:rgba(124,106,255,0.08); }
+  .pw-section { display:none; }
+  .pw-section.active { display:block; }
+  .pw-input-wrap { margin-bottom:14px; }
+  .pw-input-wrap label { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; display:block; margin-bottom:6px; }
+  .pw-input { width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:12px 16px; border-radius:10px; font-family:'DM Mono',monospace; font-size:14px; outline:none; transition:border-color 0.2s; }
+  .pw-input:focus { border-color:var(--accent); }
+  .pw-input::placeholder { color:var(--muted); }
+  .pw-btn-primary { width:100%; padding:14px; background:var(--accent); color:white; border:none; border-radius:12px; font-family:'Syne',sans-serif; font-size:15px; font-weight:700; cursor:pointer; transition:all 0.2s; margin-bottom:10px; }
+  .pw-btn-primary:hover { background:#6a58f0; transform:translateY(-1px); }
+  .pw-btn-secondary { width:100%; padding:12px; background:none; border:1px solid var(--border); color:var(--muted); border-radius:12px; font-family:'Syne',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:all 0.2s; }
+  .pw-btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+  .pw-secure { text-align:center; font-size:12px; color:var(--accent); font-family:'DM Mono',monospace; margin-top:10px; }
+  .pw-contact-row { display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .pw-contact-label { font-size:12px; color:var(--muted); font-family:'DM Mono',monospace; }
+  .pw-contact-email { font-size:12px; color:var(--accent); font-family:'DM Mono',monospace; text-decoration:none; border-bottom:1px solid rgba(124,106,255,0.4); padding-bottom:1px; }
+  .pw-contact-email:hover { color:var(--accent2); border-color:var(--accent2); }
+  .pw-secure-row { text-align:center; font-size:13px; color:var(--accent); font-family:'DM Mono',monospace; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:6px; }
+  .pw-secure-row span { color:var(--accent); }
+  .pw-features { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-top:20px; }
+  .pw-features h4 { font-size:13px; font-weight:700; margin-bottom:12px; }
+  .pw-feature { font-size:13px; color:var(--muted); font-family:'DM Mono',monospace; margin-bottom:7px; display:flex; align-items:center; gap:8px; }
+  .pw-feature::before { content:'✓'; color:var(--accent3); font-weight:700; flex-shrink:0; }
+  .pw-close { position:absolute; top:16px; right:16px; background:none; border:1px solid var(--border); color:var(--muted); width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+  .pw-close:hover { border-color:var(--danger); color:var(--danger); }
+  .pw-modal-wrap { position:relative; }
+  .pw-limit-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3); border-radius:100px; padding:4px 12px; font-size:11px; font-family:'DM Mono',monospace; color:#fbbf24; margin-bottom:16px; }
+  .pw-error { color:var(--danger); font-size:12px; font-family:'DM Mono',monospace; margin-top:8px; display:none; }
+  .pw-error.visible { display:block; }
+  .unlocked-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(106,255,204,0.08); border:1px solid rgba(106,255,204,0.25); border-radius:100px; padding:4px 14px; font-size:11px; font-family:'DM Mono',monospace; color:var(--accent3); cursor:pointer; transition:all 0.2s; }
+  .unlocked-badge:hover { background:rgba(106,255,204,0.15); }
+
+
+  /* ── FOOTER ── */
+  .site-footer { border-top: 1px solid var(--border); padding: 28px 40px; margin-top: 40px; }
+  .footer-inner { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+  .footer-text { font-size: 13px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .footer-email { font-size: 13px; font-family: 'DM Mono', monospace; color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(124,106,255,0.3); padding-bottom: 1px; transition: all 0.2s; }
+  .footer-email:hover { color: var(--accent2); border-color: var(--accent2); }
+
+
+  /* ── LINK ITEM EXTRAS ── */
+  .btn-eye { width:30px; height:30px; border-radius:7px; border:1px solid var(--border); background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0; padding:0; }
+  .btn-eye.active  { border-color:rgba(96,165,250,0.5); background:rgba(96,165,250,0.08); }
+  .btn-eye.inactive { border-color:rgba(100,100,120,0.4); background:rgba(100,100,120,0.06); }
+  .btn-eye.active:hover  { background:rgba(96,165,250,0.18); }
+  .btn-eye.inactive:hover { background:rgba(100,100,120,0.15); }
+  .btn-stats { width:30px; height:30px; border-radius:7px; border:1px solid var(--border); background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0; padding:0; }
+  .btn-stats:hover { border-color:var(--accent); background:rgba(124,106,255,0.1); }
+  .link-item.inactive-link { opacity:0.45; }
+  .link-item.inactive-link:hover { opacity:0.7; }
+
+  /* ── HOUR / WEEKDAY CHARTS ── */
+  .hour-chart { display:flex; align-items:flex-end; gap:3px; height:60px; }
+  .hour-bar { flex:1; border-radius:3px 3px 0 0; background:rgba(124,106,255,0.25); transition:background 0.2s; position:relative; cursor:default; min-width:0; }
+  .hour-bar:hover { background:var(--accent); }
+  .hour-bar:hover::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:var(--surface2); border:1px solid var(--border); color:var(--text); font-size:10px; font-family:'DM Mono',monospace; padding:3px 7px; border-radius:5px; white-space:nowrap; z-index:10; }
+  .hour-labels { display:flex; justify-content:space-between; margin-top:6px; }
+  .hour-label { font-size:9px; font-family:'DM Mono',monospace; color:var(--muted); }
+  .week-chart { display:flex; gap:8px; }
+  .week-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .week-bar-track { width:100%; background:var(--surface2); border-radius:4px; height:80px; display:flex; align-items:flex-end; overflow:hidden; }
+  .week-bar-fill { width:100%; border-radius:4px 4px 0 0; background:rgba(255,106,176,0.4); transition:height 0.6s cubic-bezier(0.4,0,0.2,1); }
+  .week-bar-wrap:hover .week-bar-fill { background:var(--accent2); }
+  .week-bar-label { font-size:10px; font-family:'DM Mono',monospace; color:var(--muted); }
+  .week-bar-count { font-size:11px; font-family:'DM Mono',monospace; color:var(--text); font-weight:600; }
+  .peak-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(106,255,204,0.08); border:1px solid rgba(106,255,204,0.2); border-radius:100px; padding:4px 12px; font-size:11px; font-family:'DM Mono',monospace; color:var(--accent3); margin-top:14px; }
+
+  /* ── RENAME ── */
+  .rename-row { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+  .link-name-display { font-size:20px; font-weight:700; letter-spacing:-0.5px; cursor:pointer; border-bottom:1px dashed var(--border); padding-bottom:2px; transition:border-color 0.2s; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .link-name-display:hover { border-color:var(--accent); color:var(--accent); }
+  .link-name-display .placeholder { color:var(--muted); font-weight:400; font-size:16px; }
+  .rename-input { flex:1; background:var(--surface2); border:1px solid var(--accent); color:var(--text); padding:8px 14px; border-radius:8px; font-family:'Syne',sans-serif; font-size:16px; font-weight:600; outline:none; }
+  .btn-rename-save { padding:8px 16px; background:var(--accent); color:white; border:none; border-radius:8px; font-family:'Syne',sans-serif; font-size:13px; font-weight:600; cursor:pointer; flex-shrink:0; }
+  .btn-rename-save:hover { background:#6a58f0; }
+  .btn-rename-cancel { padding:8px 12px; background:none; border:1px solid var(--border); color:var(--muted); border-radius:8px; font-family:'Syne',sans-serif; font-size:13px; cursor:pointer; flex-shrink:0; }
+  .btn-rename-cancel:hover { border-color:var(--danger); color:var(--danger); }
+
+  @media (max-width: 600px) {
+    nav { padding: 16px 20px; }
+    .analytics-grid { grid-template-columns: 1fr; }
+    .shorten-form { flex-direction: column; padding: 12px; }
+    .btn-shorten { width: 100%; justify-content: center; }
+    .stats-strip { gap: 20px; }
+    .link-date { display: none; }
+    .link-actions { display: none; }
+  }
+
+  /* ── REDIRECT CURTAIN ── */
+  #redirect-curtain {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: #0a0a0f;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+  #redirect-curtain.on { display: flex; }
+  #redirect-curtain .rc-spinner {
+    width: 48px; height: 48px;
+    position: relative; margin-bottom: 28px;
+  }
+  #redirect-curtain .rc-spinner::before,
+  #redirect-curtain .rc-spinner::after {
+    content: ''; position: absolute; inset: 0;
+    border-radius: 50%; border: 2.5px solid transparent;
+  }
+  #redirect-curtain .rc-spinner::before {
+    border-top-color: #7c6aff; border-right-color: #7c6aff;
+    animation: rc-spin 0.9s cubic-bezier(0.4,0,0.2,1) infinite;
+  }
+  #redirect-curtain .rc-spinner::after {
+    border-bottom-color: rgba(124,106,255,0.2); border-left-color: rgba(124,106,255,0.2);
+    animation: rc-spin 0.9s cubic-bezier(0.4,0,0.2,1) infinite reverse;
+    animation-delay: -0.45s;
+  }
+  @keyframes rc-spin { to { transform: rotate(360deg); } }
+  #redirect-curtain .rc-label { color: #7070a0; font-family: 'DM Mono', monospace; font-size: 13px; letter-spacing: 0.5px; }
+  #redirect-curtain .rc-dot { display: inline-block; animation: rc-blink 1.2s infinite; }
+  #redirect-curtain .rc-dot:nth-child(2) { animation-delay: 0.2s; }
+  #redirect-curtain .rc-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes rc-blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+</style>
+</head>
+<body>
+
+<div id="redirect-curtain">
+  <div class="rc-spinner"></div>
+  <div class="rc-label">Redirecting<span class="rc-dot">.</span><span class="rc-dot">.</span><span class="rc-dot">.</span></div>
+</div>
+
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<div class="wrapper" id="app">
+  <!-- App renders here -->
+</div>
+
+
+
+<!-- LOGIN MODAL -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <button class="login-close" onclick="closeLogin()">✕</button>
+    <h2>Log in</h2>
+    <div class="login-sub">Enter your email and access key</div>
+    <div class="login-field">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="your@email.com">
+    </div>
+    <div class="login-field">
+      <label>Access key</label>
+      <input type="password" id="login-key" placeholder="••••••••••">
+    </div>
+    <button class="login-submit" onclick="doLogin()">Log in →</button>
+    <div class="login-err" id="login-err">Invalid email or key</div>
+  </div>
+</div>
+
+<!-- PAYWALL MODAL -->
+<div class="pw-overlay" id="pw-overlay">
+  <div class="pw-modal-wrap">
+    <button class="pw-close" onclick="closePW()">✕</button>
+    <div class="pw-modal">
+
+      <!-- BUY TAB -->
+      <div id="pw-buy-section">
+        <div class="pw-limit-badge">🔒 Free limit reached</div>
+        <h2>More Links</h2>
+        <div class="pw-sub">Choose a plan and get your license key</div>
+
+        <div class="pw-plans">
+          <div class="pw-plan" onclick="selectPlan(this,3,'6.90')" data-limit="3">
+            <div class="radio"></div>
+            <div class="pw-plan-info">
+              <div class="pw-plan-title"><span class="price">$6.90</span> &nbsp;—&nbsp; <span class="links-count">3 links</span></div>
+            </div>
+          </div>
+          <div class="pw-plan selected" onclick="selectPlan(this,10,'13.80')" data-limit="10">
+            <div class="radio"></div>
+            <div class="pw-plan-info">
+              <div class="pw-plan-title"><span class="price">$13.80</span> &nbsp;—&nbsp; <span class="links-count">10 links</span></div>
+              <div class="pw-plan-badge pink">Save 40% vs small pack!</div>
+            </div>
+          </div>
+          <div class="pw-plan" onclick="selectPlan(this,30,'27.60')" data-limit="30">
+            <div class="radio"></div>
+            <div class="pw-plan-info">
+              <div class="pw-plan-title"><span class="price">$27.60</span> &nbsp;—&nbsp; <span class="links-count">30 links</span></div>
+            </div>
+          </div>
+          <div class="pw-plan" onclick="selectPlan(this,100,'69.00')" data-limit="100">
+            <div class="radio"></div>
+            <div class="pw-plan-info">
+              <div class="pw-plan-title"><span class="price">$69.00</span> &nbsp;—&nbsp; <span class="links-count">100 links</span></div>
+              <div class="pw-plan-badge green">Best deal — save 70% per link!</div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="pw-divider">
+
+        <div class="pw-contact-row">
+          <span class="pw-contact-label">Questions? Write us:</span>
+          <a class="pw-contact-email" href="/cdn-cgi/l/email-protection#d3b4a1b2b5b2baa1b2a793b4beb2babffdb0bcbe"><span class="__cf_email__" data-cfemail="7e190c1f181f170c1f0a3e19131f1712501d1113">[email&#160;protected]</span></a>
+        </div>
+
+        <button class="pw-btn-primary" id="pw-purchase-btn" onclick="showPWLogin()">Purchase 10 Links for $13.80</button>
+        <div class="pw-secure-row">🔒 <span>Secure transaction</span></div>
+
+        <div class="pw-features">
+          <h4>What's included:</h4>
+          <div class="pw-feature">More short links</div>
+          <div class="pw-feature">Full analytics for each link</div>
+          <div class="pw-feature">QR codes for all links</div>
+          <div class="pw-feature">Rename links</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="qr-modal" onclick="closeQR(event)">
+  <div class="modal">
+    <h3>QR Code</h3>
+    <p id="qr-label"></p>
+    <canvas id="qr-canvas" width="200" height="200"></canvas>
+    <button class="modal-close" onclick="closeQR()">Close</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+// ═══════════════════════════════════════
+// ПРОВЕРКА КОНФИГУРАЦИИ
+// ═══════════════════════════════════════
+const IS_CONFIGURED = JSONBIN_API_KEY.length > 10 && JSONBIN_BIN_ID.length > 10;
+
+const BASE_URL = (window.location.origin + window.location.pathname).replace(/\/+$/, '');
+let ALL_LINKS = [];
+let lastShortened = null;
+let selectedCode = null;
+
+// ═══════════════════════════════════════
+// РЕНДЕР СТРУКТУРЫ СТРАНИЦЫ
+// ═══════════════════════════════════════
+function renderApp() {
+  // Если это редирект — сразу показываем шторку, сайт не рендерим
+  if (new URLSearchParams(window.location.search).get('r')) {
+    document.getElementById('redirect-curtain').classList.add('on');
+    return;
+  }
+  const app = document.getElementById('app');
+
+  if (!IS_CONFIGURED) {
+    app.innerHTML = `
+      <nav>
+        <div class="logo"><span>figma</span>.fun</div>
+      </nav>
+      <div class="not-configured">
+        <div class="icon">🔧</div>
+        <h2>Setup required</h2>
+        <p>Open the file <code style="background:var(--surface2);border:1px solid var(--border);padding:2px 8px;border-radius:4px;font-size:13px">index.html</code> in any text editor (Notepad, VS Code) and replace the two lines at the top.</p>
+        <div class="steps-box">
+          <h3>Step by step</h3>
+          <div class="step-item">
+            <div class="sn">1</div>
+            <div class="st">Go to <a href="https://jsonbin.io" target="_blank">jsonbin.io</a> → Sign Up (free)</div>
+          </div>
+          <div class="step-item">
+            <div class="sn">2</div>
+            <div class="st">Profile → <strong>API Keys</strong> → copy your <code>Master Key</code></div>
+          </div>
+          <div class="step-item">
+            <div class="sn">3</div>
+            <div class="st">Home → <strong>+ New Bin</strong> → paste <code>{"links":[]}</code> → Create → copy the <strong>Bin ID</strong> from the URL</div>
+          </div>
+          <div class="step-item">
+            <div class="sn">4</div>
+            <div class="st">In <code>index.html</code> find these lines:<br><code>ВСТАВЬ_СЮДА_MASTER_KEY</code><br><code>ВСТАВЬ_СЮДА_BIN_ID</code><br>and replace them with your keys</div>
+          </div>
+          <div class="step-item">
+            <div class="sn">5</div>
+            <div class="st">Upload the updated file to GitHub and you're done ✓</div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  app.innerHTML = `
+    <nav>
+      <div class="logo"><span>figma</span>.fun</div>
+      <div class="nav-links">
+        <button class="active" id="nav-home" onclick="showPage('home')">Shorten</button>
+        <button id="nav-analytics" onclick="showPage('analytics')">Analytics</button>
+      </div>
+    </nav>
+
+    <div class="page active" id="page-home">
+      <div class="hero">
+        <div class="hero-badge">Link shortener</div>
+        <h1>Turn long links into<br><span class="grad">pure fun</span></h1>
+        <p>Paste any URL — get a short, clean link<br>that works on every device.</p>
+        <div class="shorten-form">
+          <input type="url" id="url-input" placeholder="https://www.figma.com/file/..." autocomplete="off" spellcheck="false">
+          <button class="btn-shorten" id="btn-shorten" onclick="shortenURL()">
+            <div class="spinner" id="shorten-spinner"></div>
+            <span id="shorten-label">Shorten ↗</span>
+          </button>
+        </div>
+        <div class="result-box" id="result-box">
+          <div class="result-url">
+            <div class="label">your short link</div>
+            <a class="short-link" id="result-short" href="#" target="_blank"></a>
+            <div class="orig-link" id="result-orig"></div>
+          </div>
+          <div class="result-actions">
+            <button class="btn-copy" id="btn-copy" onclick="copyShort()">Copy</button>
+            <button class="btn-qr" onclick="showQR()">QR</button>
+          </div>
+        </div>
+        <div class="stats-strip">
+          <div class="stat"><div class="stat-num" id="stat-total"><span>…</span></div><div class="stat-label">links created</div></div>
+          <div class="stat"><div class="stat-num" id="stat-clicks"><span>…</span></div><div class="stat-label">total clicks</div></div>
+          <div class="stat"><div class="stat-num" id="stat-today"><span>…</span></div><div class="stat-label">today</div></div>
+        </div>
+      </div>
+      <div class="recent-section">
+        <div class="section-title">
+          Recent Links
+          <button class="refresh-btn" onclick="loadAllLinks()" title="Refresh">↻</button>
+        </div>
+        <div class="links-list" id="links-list">
+          <div class="empty-state"><span class="emoji">⏳</span>Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-analytics">
+      <div class="analytics-page">
+        <div class="page-header">
+          <button onclick="showPage('home')" style="display:inline-flex;align-items:center;gap:7px;background:none;border:1px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:8px;font-family:'Syne',sans-serif;font-size:13px;cursor:pointer;transition:all 0.2s;margin-bottom:20px;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">← Back</button>
+          <h2>Analytics</h2>
+          <p>Clicks, devices and traffic sources</p>
+        </div>
+        <div class="link-selector" id="link-selector"></div>
+        <div id="analytics-content"><div class="no-data">Loading...</div></div>
+      </div>
+    </div>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <span class="footer-text">Questions or issues? Let's chat:</span>
+        <a class="footer-email" href="mailto:grafairat@gmail.com">grafairat@gmail.com</a>
+      </div>
+    </footer>
+  `;
+
+  document.getElementById('url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') shortenURL();
+  });
+}
+
+// ═══════════════════════════════════════
+// JSONBIN API
+// ═══════════════════════════════════════
+async function readBin() {
+  const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+    headers: { 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Meta': 'false' }
+  });
+  if (!r.ok) throw new Error('Read error: ' + r.status);
+  const data = await r.json();
+  return Array.isArray(data.links) ? data.links : [];
+}
+
+async function writeBin(links) {
+  const r = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY },
+    body: JSON.stringify({ links })
+  });
+  if (!r.ok) throw new Error('Write error: ' + r.status);
+}
+
+// ═══════════════════════════════════════
+// REDIRECT
+// ═══════════════════════════════════════
+async function checkRedirect() {
+  const hash = new URLSearchParams(window.location.search).get('r') || '';
+  if (!hash || !IS_CONFIGURED) return;
+
+  try {
+    const links = await readBin();
+    const entry = links.find(l => l.code === hash);
+    if (!entry) return;
+    if (entry.inactive) return; // link is disabled
+
+    const click = {
+      ts: Date.now(),
+      ref: document.referrer || 'direct',
+      device: getDevice()
+    };
+    entry.clicks = entry.clicks || [];
+    entry.clicks.push(click);
+    entry.total_clicks = (entry.total_clicks || 0) + 1;
+    writeBin(links); // fire and forget
+    window.location.replace(entry.url);
+  } catch(e) {
+    console.error('Redirect error:', e);
+  }
+}
+
+function getDevice() {
+  const ua = navigator.userAgent;
+  if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+  if (/mobile|android|iphone|ipod|blackberry|iemobile|opera mini/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+// ═══════════════════════════════════════
+// SHORTEN
+// ═══════════════════════════════════════
+function genCode(len = 8) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  return Array.from({length: len}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+async function shortenURL() {
+  const input = document.getElementById('url-input');
+  const raw = input.value.trim();
+  if (!raw) { showToast('Paste a URL!'); return; }
+
+  let url = raw;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+  try { new URL(url); } catch { showToast('Invalid URL 🤔'); return; }
+
+  setLoading(true);
+  try {
+    const links = await readBin();
+
+    // Check limit
+    const existing_url = links.find(l => l.url === url);
+    if (!existing_url && isLimitReached()) {
+      setLoading(false);
+      showPW();
+      return;
+    }
+
+    const existing = links.find(l => l.url === url);
+    if (existing) {
+      showResultBox(existing);
+      ALL_LINKS = links;
+      renderLinksList(); updateStats();
+      showToast('Link already exists ✓');
+      setLoading(false); return;
+    }
+    const code = genCode(8);
+    const entry = { code, url, short: BASE_URL + '/' + code, created: Date.now(), total_clicks: 0, clicks: [] };
+    links.unshift(entry);
+    await writeBin(links);
+    ALL_LINKS = links;
+    showResultBox(entry);
+    renderLinksList(); updateStats();
+    if (!getSession()) {
+      incrementUserLinkCount();
+      // Save guest's own link codes to localStorage
+      const guestLinks = getGuestLinkCodes();
+      guestLinks.push(entry.code);
+      localStorage.setItem(GUEST_LINKS_KEY, JSON.stringify(guestLinks));
+    }
+    showToast('Link created! ✨');
+  } catch(e) { showToast('Error: ' + e.message); }
+  setLoading(false);
+}
+
+function setLoading(on) {
+  const btn = document.getElementById('btn-shorten');
+  document.getElementById('shorten-spinner').style.display = on ? 'block' : 'none';
+  document.getElementById('shorten-label').textContent = on ? 'Creating...' : 'Shorten ↗';
+  btn.disabled = on;
+}
+
+function showResultBox(entry) {
+  const box = document.getElementById('result-box');
+  document.getElementById('result-short').textContent = entry.short;
+  document.getElementById('result-short').href = entry.short;
+  document.getElementById('result-orig').textContent = entry.url;
+  box.classList.add('visible');
+  lastShortened = entry;
+}
+
+function copyShort() {
+  if (!lastShortened) return;
+  navigator.clipboard.writeText(lastShortened.short).then(() => {
+    const btn = document.getElementById('btn-copy');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    showToast('Copied ✓');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ═══════════════════════════════════════
+// LINKS LIST
+// ═══════════════════════════════════════
+async function loadAllLinks() {
+  try {
+    ALL_LINKS = await readBin();
+    renderLinksList(); updateStats();
+  } catch(e) {
+    document.getElementById('links-list').innerHTML = `<div class="empty-state"><span class="emoji">❌</span>Load error: ${e.message}</div>`;
+  }
+}
+
+function renderLinksList() {
+  const list = document.getElementById('links-list');
+
+  // Guest: show only their own link(s) from this device
+  if (!getSession()) {
+    const guestLinks = getGuestLinks();
+    if (!guestLinks.length) {
+      list.innerHTML = '<div class="empty-state"><span class="emoji">🔗</span>No links yet. Shorten your first one above!</div>';
+      return;
+    }
+    list.innerHTML = guestLinks.map(l => {
+      const icon = getFavicon(l.url);
+      const date = new Date(l.created).toLocaleDateString('en', { month:'short', day:'numeric' });
+      return `
+        <div class="link-item" onclick="viewAnalytics('${l.code}')">
+          <div class="link-icon">${icon}</div>
+          <div class="link-info">
+            <div class="link-short">${l.name || ('#' + l.code)}</div>
+            <div class="link-orig">${l.url}</div>
+          </div>
+          <div class="link-meta">
+            <span class="link-clicks">${l.total_clicks || 0}</span>
+            <span class="link-date">${date}</span>
+          </div>
+          <div class="link-actions" onclick="event.stopPropagation()">
+            <button class="btn-sm" onclick="copyCode('${l.short}')">copy</button>
+          </div>
+        </div>`;
+    }).join('') + `
+      <div style="text-align:center;padding:16px 0 4px;border-top:1px solid var(--border);margin-top:8px">
+        <span style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace">Want more links? </span>
+        <a href="#" onclick="showPW();return false" style="font-size:12px;color:var(--accent);font-family:'DM Mono',monospace;text-decoration:none">Upgrade →</a>
+      </div>`;
+    return;
+  }
+
+  if (!ALL_LINKS.length) {
+    list.innerHTML = '<div class="empty-state"><span class="emoji">🔗</span>No links yet. Shorten your first one above!</div>';
+    return;
+  }
+  list.innerHTML = ALL_LINKS.slice(0, 12).map(l => {
+    const icon = getFavicon(l.url);
+    const date = new Date(l.created).toLocaleDateString('en', { month:'short', day:'numeric' });
+    return `
+      <div class="link-item ${l.inactive ? 'inactive-link' : ''}" onclick="viewAnalytics('${l.code}')">
+        <div class="link-icon">${icon}</div>
+        <div class="link-info">
+          <div class="link-short">${l.name || ('#' + l.code)}</div>
+          <div class="link-orig">${l.url}</div>
+        </div>
+        <div class="link-meta">
+          <span class="link-clicks">${l.total_clicks || 0}</span>
+          <span class="link-date">${date}</span>
+        </div>
+        <div class="link-actions" onclick="event.stopPropagation()">
+          <button class="btn-sm" onclick="copyCode('${l.short}')">copy</button>
+          <button class="btn-eye ${l.inactive ? 'inactive' : 'active'}" onclick="toggleActive('${l.code}')" title="${l.inactive ? 'Disabled — click to enable' : 'Active — click to disable'}">
+            ${l.inactive
+              ? `<svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M1 7.5C1 7.5 3.5 3 7.5 3C11.5 3 14 7.5 14 7.5C14 7.5 11.5 12 7.5 12C3.5 12 1 7.5 1 7.5Z" stroke="#6b7280" stroke-width="1.3" fill="none"/>
+              <line x1="2" y1="2" x2="13" y2="13" stroke="#6b7280" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>`
+              : `<svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M1 7.5C1 7.5 3.5 3 7.5 3C11.5 3 14 7.5 14 7.5C14 7.5 11.5 12 7.5 12C3.5 12 1 7.5 1 7.5Z" stroke="#60a5fa" stroke-width="1.3" fill="none"/>
+              <circle cx="7.5" cy="7.5" r="2" stroke="#60a5fa" stroke-width="1.3" fill="none"/>
+            </svg>`}
+          </button>
+          <button class="btn-stats" onclick="viewAnalytics('${l.code}')" title="View analytics">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="7" width="3" height="6" rx="1" fill="#7c6aff" opacity="0.7"/>
+              <rect x="5.5" y="4" width="3" height="9" rx="1" fill="#7c6aff" opacity="0.85"/>
+              <rect x="10" y="1" width="3" height="12" rx="1" fill="#7c6aff"/>
+            </svg>
+          </button>
+          <button class="btn-stats" onclick="deleteLink('${l.code}')" title="Delete link" style="border-color:rgba(248,113,113,0.3);">
+            <svg width="13" height="14" viewBox="0 0 13 14" fill="none">
+              <path d="M1 3.5H12M4.5 3.5V2.5C4.5 2 5 1.5 5.5 1.5H7.5C8 1.5 8.5 2 8.5 2.5V3.5M5.5 6.5V10.5M7.5 6.5V10.5M2 3.5L2.5 11.5C2.5 12 3 12.5 3.5 12.5H9.5C10 12.5 10.5 12 10.5 11.5L11 3.5H2Z" stroke="#f87171" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function getFavicon(url) {
+  try {
+    const h = new URL(url).hostname;
+    if (h.includes('figma')) return '🎨';
+    if (h.includes('github')) return '🐙';
+    if (h.includes('youtube') || h.includes('youtu.be')) return '▶️';
+    if (h.includes('notion')) return '📝';
+    if (h.includes('twitter') || h.includes('x.com')) return '𝕏';
+    if (h.includes('telegram') || h.includes('t.me')) return '✈️';
+    if (h.includes('instagram')) return '📸';
+    if (h.includes('google')) return '🔍';
+    return '🔗';
+  } catch { return '🔗'; }
+}
+
+function copyCode(short) {
+  navigator.clipboard.writeText(short).then(() => showToast('Copied! ✓'));
+}
+
+async function toggleActive(code) {
+  try {
+    const links = ALL_LINKS;
+    const entry = links.find(l => l.code === code);
+    if (!entry) return;
+    entry.inactive = !entry.inactive;
+    await writeBin(links);
+    ALL_LINKS = links;
+    renderLinksList();
+    showToast(entry.inactive ? '🔴 Link disabled' : '🟢 Link enabled');
+  } catch(e) { showToast('Error: ' + e.message); }
+}
+
+async function deleteLink(code) {
+  if (!confirm('Delete this link?')) return;
+  try {
+    const links = ALL_LINKS.filter(l => l.code !== code);
+    await writeBin(links);
+    ALL_LINKS = links;
+    renderLinksList(); updateStats();
+    showToast('Deleted');
+  } catch(e) { showToast('Error: ' + e.message); }
+}
+
+function updateStats() {
+  const today = new Date().toDateString();
+  const todayCount = ALL_LINKS.filter(l => new Date(l.created).toDateString() === today).length;
+  const totalClicks = ALL_LINKS.reduce((s, l) => s + (l.total_clicks || 0), 0);
+  document.getElementById('stat-total').innerHTML = `<span>${ALL_LINKS.length}</span>`;
+  document.getElementById('stat-clicks').innerHTML = `<span>${totalClicks}</span>`;
+  document.getElementById('stat-today').innerHTML = `<span>${todayCount}</span>`;
+}
+
+// ═══════════════════════════════════════
+// ANALYTICS
+// ═══════════════════════════════════════
+function viewAnalytics(code) { selectedCode = code; showPage('analytics'); }
+
+function renderAnalytics() {
+  const selector = document.getElementById('link-selector');
+  const content = document.getElementById('analytics-content');
+
+  const isGuest = !getSession();
+  const visibleLinks = isGuest ? getGuestLinks() : ALL_LINKS;
+
+  if (!visibleLinks.length) {
+    selector.innerHTML = '';
+    if (isGuest) {
+      content.innerHTML = '<div class="no-data">Create your first link to see analytics</div>';
+    } else {
+      content.innerHTML = '<div class="no-data">No links</div>';
+    }
+    return;
+  }
+  selector.innerHTML = visibleLinks.slice(0, 10).map(l =>
+    `<div class="link-chip ${selectedCode === l.code ? 'active' : ''}" onclick="selectChip('${l.code}')">${l.name || l.code}</div>`
+  ).join('');
+
+  if (!selectedCode || !visibleLinks.find(l => l.code === selectedCode)) {
+    selectedCode = visibleLinks[0].code;
+  }
+
+  const link = visibleLinks.find(l => l.code === selectedCode);
+  if (!link) return;
+
+  const clicks = link.clicks || [];
+  const total = clicks.length;
+  const deviceMap = { desktop: 0, mobile: 0, tablet: 0 };
+  const refMap = {};
+  const dayMap = {};
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    dayMap[d.toLocaleDateString('en', { month:'short', day:'numeric' })] = 0;
+  }
+
+  clicks.forEach(c => {
+    deviceMap[c.device] = (deviceMap[c.device] || 0) + 1;
+    const ref = (!c.ref || c.ref === 'direct') ? 'direct' : (() => {
+      try { return new URL(c.ref).hostname.replace('www.', ''); } catch { return 'other'; }
+    })();
+    refMap[ref] = (refMap[ref] || 0) + 1;
+    const day = new Date(c.ts).toLocaleDateString('en', { month:'short', day:'numeric' });
+    if (day in dayMap) dayMap[day]++;
+  });
+
+  const refEntries = Object.entries(refMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
+  // Hour of day (0-23)
+  const hourMap = Array.from({length:24}, () => 0);
+  // Day of week (0=Вс,1=Пн,...,6=Сб)
+  const weekLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const weekMap = Array.from({length:7}, () => 0);
+  clicks.forEach(c => {
+    const d = new Date(c.ts);
+    hourMap[d.getHours()]++;
+    weekMap[d.getDay()]++;
+  });
+  const maxHour = Math.max(...hourMap, 1);
+  const maxWeek = Math.max(...weekMap, 1);
+
+  // Peak hour
+  const peakHour = hourMap.indexOf(Math.max(...hourMap));
+  const peakHourLabel = total > 0 ? `${peakHour}:00–${peakHour+1}:00` : null;
+  const peakDay = weekMap.indexOf(Math.max(...weekMap));
+  const peakDayLabel = total > 0 ? weekLabels[peakDay] : null;
+
+  // Hour bars HTML
+  const hourBars = hourMap.map((cnt, h) => {
+    const pct = Math.max(Math.round(cnt / maxHour * 100), cnt > 0 ? 4 : 0);
+    const isNight = h < 6;
+    const isMorning = h >= 6 && h < 12;
+    const isDay = h >= 12 && h < 18;
+    const color = isNight ? 'rgba(124,106,255,0.2)' : isMorning ? 'rgba(106,255,204,0.35)' : isDay ? 'rgba(124,106,255,0.5)' : 'rgba(255,106,176,0.4)';
+    return `<div class="hour-bar" style="height:${pct}%;background:${pct>0?color:'rgba(255,255,255,0.04)'}" data-tip="${h}:00 — ${cnt} clicks"></div>`;
+  }).join('');
+
+  // Week bars HTML
+  const weekBars = weekMap.map((cnt, i) => {
+    const pct = Math.max(Math.round(cnt / maxWeek * 100), cnt > 0 ? 4 : 0);
+    return `<div class="week-bar-wrap">
+      <div class="week-bar-track"><div class="week-bar-fill" style="height:${pct}%"></div></div>
+      <div class="week-bar-label">${weekLabels[i]}</div>
+      <div class="week-bar-count">${cnt}</div>
+    </div>`;
+  }).join('');
+  const maxRef = refEntries.length ? refEntries[0][1] : 1;
+  const devTotal = Object.values(deviceMap).reduce((a,b)=>a+b,0) || 1;
+  const donutData = [
+    { label: 'Desktop', val: deviceMap.desktop, color: '#7c6aff' },
+    { label: 'Mobile',  val: deviceMap.mobile,  color: '#ff6ab0' },
+    { label: 'Tablet',  val: deviceMap.tablet,  color: '#6affcc' },
+  ].filter(d => d.val > 0);
+
+  const dayVals = Object.values(dayMap);
+  const maxDay = Math.max(...dayVals, 1);
+  const sparkBars = Object.entries(dayMap).map(([day, cnt]) =>
+    `<div class="spark-bar" style="height:${Math.max(Math.round(cnt/maxDay*100),4)}%" title="${day}: ${cnt}"></div>`
+  ).join('');
+
+  const nameDisplay = link.name
+    ? `<span>${link.name}</span>`
+    : `<span class="placeholder">Add a name...</span>`;
+
+  content.innerHTML = `
+    <div class="rename-row" id="rename-row">
+      <div class="link-name-display" id="name-display" onclick="startRename('${link.code}')" title="Click to rename">${nameDisplay}</div>
+      <div id="rename-form" style="display:none;flex:1;display:none;align-items:center;gap:8px">
+        <input class="rename-input" id="rename-input" type="text" placeholder="Link name..." value="${(link.name || '').replace(/"/g,'&quot;')}">
+        <button class="btn-rename-save" onclick="saveRename('${link.code}')">Save</button>
+        <button class="btn-rename-cancel" onclick="cancelRename()">✕</button>
+      </div>
+    </div>
+    <div class="analytics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Total clicks</div>
+        <div class="metric-value" style="color:var(--accent)">${total}</div>
+        <div class="metric-sub">#${link.code}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Destination</div>
+        <div style="font-size:12px;font-family:'DM Mono',monospace;color:var(--muted);word-break:break-all;margin-top:8px;line-height:1.5">${link.url}</div>
+        <div class="metric-sub" style="margin-top:8px">Created ${new Date(link.created).toLocaleDateString('en', {day:'numeric',month:'long',year:'numeric'})}</div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title"><div class="dot" style="background:var(--accent)"></div>Clicks over 7 days</div>
+      <div class="sparkline-wrap">
+        ${total === 0
+          ? '<div style="color:var(--muted);font-family:DM Mono,monospace;font-size:12px;align-self:center">No clicks yet</div>'
+          : sparkBars}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px">
+        ${Object.keys(dayMap).map(d=>`<span style="font-size:10px;font-family:'DM Mono',monospace;color:var(--muted)">${d}</span>`).join('')}
+      </div>
+    </div>
+
+    <div class="analytics-grid">
+      <div class="chart-card" style="margin:0">
+        <div class="chart-title"><div class="dot" style="background:var(--accent)"></div>By hour of day</div>
+        ${total === 0 ? '<div style="color:var(--muted);font-family:DM Mono,monospace;font-size:12px">No data</div>' : `
+        <div class="hour-chart">${hourBars}</div>
+        <div class="hour-labels">
+          <span class="hour-label">00</span><span class="hour-label">06</span>
+          <span class="hour-label">12</span><span class="hour-label">18</span>
+          <span class="hour-label">23</span>
+        </div>
+        ${peakHourLabel ? `<div class="peak-badge">⏰ Peak: ${peakHourLabel}</div>` : ''}
+        `}
+      </div>
+      <div class="chart-card" style="margin:0">
+        <div class="chart-title"><div class="dot" style="background:var(--accent2)"></div>By day of week</div>
+        ${total === 0 ? '<div style="color:var(--muted);font-family:DM Mono,monospace;font-size:12px">No data</div>' : `
+        <div class="week-chart">${weekBars}</div>
+        ${peakDayLabel ? `<div class="peak-badge">📅 Peak: ${peakDayLabel}</div>` : ''}
+        `}
+      </div>
+    </div>
+
+    <div class="analytics-grid">
+      <div class="chart-card" style="margin:0">
+        <div class="chart-title"><div class="dot" style="background:var(--accent2)"></div>Devices</div>
+        ${total === 0 ? '<div style="color:var(--muted);font-family:DM Mono,monospace;font-size:12px">No data</div>' : `
+        <div class="donut-wrap">
+          ${buildDonut(donutData, devTotal, total)}
+          <div class="donut-legend">
+            ${donutData.map(d=>`
+              <div class="legend-item">
+                <div class="legend-dot" style="background:${d.color}"></div>
+                <span>${d.label}</span>
+                <span class="legend-pct">${Math.round(d.val/devTotal*100)}%</span>
+              </div>`).join('')}
+          </div>
+        </div>`}
+      </div>
+
+      <div class="chart-card" style="margin:0">
+        <div class="chart-title"><div class="dot" style="background:var(--accent3)"></div>Referrers</div>
+        ${total === 0 ? '<div style="color:var(--muted);font-family:DM Mono,monospace;font-size:12px">No data</div>' : `
+        <div class="bar-chart">
+          ${refEntries.map(([ref,cnt])=>`
+            <div class="bar-row">
+              <div class="bar-label">${ref}</div>
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.round(cnt/maxRef*100)}%;background:var(--accent3)"></div></div>
+              <div class="bar-count">${cnt}</div>
+            </div>`).join('')}
+        </div>`}
+      </div>
+    </div>
+  `;
+}
+
+
+
+// ═══════════════════════════════════════
+// AUTH / SESSION
+// ═══════════════════════════════════════
+const SESSION_KEY = 'ff_session';
+
+function getSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
+}
+function saveSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
+
+// Track how many links THIS browser has created
+const USER_LINKS_KEY = 'ff_user_links';
+function getUserLinkCount() {
+  try { return parseInt(localStorage.getItem(USER_LINKS_KEY) || '0'); } catch { return 0; }
+}
+function incrementUserLinkCount() {
+  localStorage.setItem(USER_LINKS_KEY, getUserLinkCount() + 1);
+}
+
+const GUEST_LINKS_KEY = 'ff_guest_links';
+function getGuestLinkCodes() {
+  try { return JSON.parse(localStorage.getItem(GUEST_LINKS_KEY) || '[]'); } catch { return []; }
+}
+function getGuestLinks() {
+  const codes = getGuestLinkCodes();
+  return ALL_LINKS.filter(l => codes.includes(l.code));
+}
+
+function getAllowedLimit() {
+  const s = getSession();
+  if (s) return s.limit === null ? Infinity : s.limit;
+  return FREE_LIMIT;
+}
+function isLimitReached() {
+  if (isAdmin()) return false;
+  const s = getSession();
+  if (s) return false; // logged in users managed by their limit separately
+  return getUserLinkCount() >= FREE_LIMIT;
+}
+function isAdmin() { const s = getSession(); return s && s.type === 'admin'; }
+
+// ── LOGIN MODAL ──────────────────────────────────────
+function openLogin() {
+  document.getElementById('login-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('login-email').focus(), 100);
+}
+function closeLogin() {
+  document.getElementById('login-overlay').classList.remove('open');
+  document.getElementById('login-err').classList.remove('show');
+}
+
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const key   = document.getElementById('login-key').value.trim();
+  const err   = document.getElementById('login-err');
+  err.classList.remove('show');
+
+  const account = ACCOUNTS.find(a =>
+    a.email.toLowerCase() === email && a.key === key
+  );
+  if (!account) { err.classList.add('show'); return; }
+
+  saveSession({ email: account.email, type: account.type, limit: account.limit === Infinity ? null : account.limit });
+  closeLogin();
+  closePW();
+  renderNavBadge();
+  showToast(account.type === 'admin' ? '👑 Welcome, Admin!' : `🔓 Access granted — ${account.limit} links`);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-overlay').classList.contains('open')) doLogin();
+  if (e.key === 'Escape') { closeLogin(); closePW(); }
+});
+
+function doLogout() {
+  if (!confirm('Log out?')) return;
+  clearSession();
+  renderNavBadge();
+  renderLinksList();
+  updateStats();
+  showPage('home');
+  showToast('Logged out');
+}
+
+function renderNavBadge() {
+  const nav = document.querySelector('.nav-links');
+  if (!nav) return;
+  const old = document.getElementById('nav-user-area');
+  if (old) old.remove();
+
+  const s = getSession();
+  const wrap = document.createElement('div');
+  wrap.id = 'nav-user-area';
+  wrap.style.display = 'flex';
+  wrap.style.gap = '8px';
+  wrap.style.alignItems = 'center';
+
+  if (s) {
+    const limitLabel = s.limit === null ? '∞' : s.limit;
+    const dot = s.type === 'admin' ? 'admin' : 'paid';
+    const typeLabel = s.type === 'admin' ? 'Admin' : `${limitLabel} links`;
+    wrap.style.marginLeft = 'auto';
+  wrap.innerHTML = `<div class="user-badge" onclick="doLogout()" title="Click to log out">
+      <div class="badge-dot ${dot}"></div>
+      <span class="badge-name">${s.email.split('@')[0]}</span>
+      <span class="badge-type">${typeLabel}</span>
+    </div>`;
+  } else {
+    wrap.innerHTML = `<button class="btn-login-nav" onclick="openLogin()" style="background:rgba(124,106,255,0.1);border:1px solid rgba(124,106,255,0.3);color:var(--accent);padding:8px 16px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;transition:all 0.2s;margin-left:auto;">Log in</button>`;
+  }
+  nav.appendChild(wrap);
+}
+
+// ── PAYWALL ──────────────────────────────────────────
+function showPW() { document.getElementById('pw-overlay').classList.add('open'); }
+function closePW() { document.getElementById('pw-overlay').classList.remove('open'); }
+function showPWLogin() { closePW(); openLogin(); }
+function selectPlan(el, limit, price) {
+  document.querySelectorAll('.pw-plan').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  const btn = document.getElementById('pw-purchase-btn');
+  if (btn) btn.textContent = `Purchase ${limit} Links for $${price}`;
+}
+function activateKey() { showPWLogin(); }
+
+
+// ═══════════════════════════════════════
+// RENAME
+// ═══════════════════════════════════════
+function startRename(code) {
+  const row = document.getElementById('rename-row');
+  document.getElementById('name-display').style.display = 'none';
+  const form = document.getElementById('rename-form');
+  form.style.display = 'flex';
+  const input = document.getElementById('rename-input');
+  input.focus();
+  input.select();
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') saveRename(code);
+    if (e.key === 'Escape') cancelRename();
+  };
+}
+
+function cancelRename() {
+  document.getElementById('name-display').style.display = '';
+  document.getElementById('rename-form').style.display = 'none';
+}
+
+async function saveRename(code) {
+  const input = document.getElementById('rename-input');
+  const name = input.value.trim();
+  try {
+    const links = ALL_LINKS;
+    const entry = links.find(l => l.code === code);
+    if (!entry) return;
+    entry.name = name;
+    await writeBin(links);
+    ALL_LINKS = links;
+    showToast(name ? `Name saved: ${name}` : 'Name removed');
+    renderAnalytics();
+    renderLinksList();
+  } catch(e) { showToast('Error: ' + e.message); }
+}
+
+function buildDonut(data, total, clicks) {
+  if (!data.length) return `<svg width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="36" fill="none" stroke="#2a2a3a" stroke-width="16"/></svg>`;
+  const r = 36, cx = 50, cy = 50, circ = 2 * Math.PI * r;
+  let offset = 0;
+  const paths = data.map(d => {
+    const len = (d.val / total) * circ;
+    const arc = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${d.color}" stroke-width="16" stroke-dasharray="${len} ${circ-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" opacity="0.9"/>`;
+    offset += len; return arc;
+  }).join('');
+  return `<svg width="100" height="100" viewBox="0 0 100 100">${paths}
+    <text x="50" y="46" text-anchor="middle" fill="#f0eeff" font-size="16" font-weight="800" font-family="Syne,sans-serif">${clicks}</text>
+    <text x="50" y="60" text-anchor="middle" fill="#7070a0" font-size="9" font-family="DM Mono,monospace">clicks</text>
+  </svg>`;
+}
+
+function selectChip(code) { selectedCode = code; renderAnalytics(); }
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'analytics') renderAnalytics();
+}
+
+// ═══════════════════════════════════════
+// QR
+// ═══════════════════════════════════════
+function showQR() {
+  if (!lastShortened) return;
+  document.getElementById('qr-label').textContent = lastShortened.short;
+  const canvas = document.getElementById('qr-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#1a1a24'; ctx.fillRect(0, 0, 200, 200);
+  const img = new Image(); img.crossOrigin = 'anonymous';
+  img.onload = () => { ctx.fillStyle = '#1a1a24'; ctx.fillRect(0,0,200,200); ctx.drawImage(img,10,10,180,180); };
+  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(lastShortened.short)}&color=f0eeff&bgcolor=1a1a24`;
+  document.getElementById('qr-modal').classList.add('open');
+}
+function closeQR(e) {
+  if (!e || e.target === document.getElementById('qr-modal') || !e.target)
+    document.getElementById('qr-modal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+// Если редирект — показываем шторку и редиректим, ничего больше не грузим
+if (new URLSearchParams(window.location.search).get('r')) {
+  document.getElementById('redirect-curtain').classList.add('on');
+  if (IS_CONFIGURED) checkRedirect();
+} else {
+  renderApp();
+  if (IS_CONFIGURED) loadAllLinks();
+  renderNavBadge();
+}
+</script>
+</body>
+</html>
